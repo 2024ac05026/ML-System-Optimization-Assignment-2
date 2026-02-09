@@ -1,4 +1,4 @@
-name: distributed-xgboost
+name: ML-System-Optimization-Assignment-2
 channels:
   - conda-forge
   - defaults
