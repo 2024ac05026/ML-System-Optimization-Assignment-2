@@ -1,20 +1,10 @@
-# src/data_loader.py (interface for Person 3)
 # src/data_loader.py
 
-import os
-import urllib.request
-import gzip
-import shutil
 from typing import Tuple
-
-import numpy as np
 import pandas as pd
+import numpy as np
+import dask.array as da
 from sklearn.model_selection import train_test_split
-
-from dask import array as da
-
-
-HIGGS_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz"
 
 
 class DataLoader:
@@ -22,109 +12,104 @@ class DataLoader:
         self.config = config
 
     # ------------------------------------------------
-    # Download dataset if not present
+    # Load Higgs Dataset
     # ------------------------------------------------
-    def _ensure_dataset_exists(self):
-        dataset_path = self.config.DATASET_PATH
-        os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
+    def load_dataset(self) -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        Load Higgs dataset from CSV.
 
-        if os.path.exists(dataset_path):
-            print("Higgs dataset found locally.")
-            return
+        Expected format:
+        First column = label
+        Remaining columns = features
+        """
 
-        print("Higgs dataset not found. Downloading...")
-
-        gz_path = dataset_path + ".gz"
-
-        # Download
-        urllib.request.urlretrieve(HIGGS_URL, gz_path)
-
-        # Unzip
-        with gzip.open(gz_path, "rb") as f_in:
-            with open(dataset_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
-
-        os.remove(gz_path)
-
-        print("Download complete.")
-
-    # ------------------------------------------------
-    # Load Dataset
-    # ------------------------------------------------
-    def load_dataset(self) -> Tuple[np.ndarray, np.ndarray]:
-
-        self._ensure_dataset_exists()
-
-        print("Loading dataset...")
-
-        # No header, first column = label
         df = pd.read_csv(
             self.config.DATASET_PATH,
-            header=None,
-            dtype=np.float32
+            header=None
         )
 
-        y = df.iloc[:, 0].values.astype(np.int32)
-        X = df.iloc[:, 1:].values.astype(np.float32)
+        # Higgs format:
+        # Column 0 = label
+        # Columns 1-28 = features
+        y = df.iloc[:, 0]
+        X = df.iloc[:, 1:]
 
         return X, y
 
     # ------------------------------------------------
-    # Preprocess (minimal for trees)
+    # Preprocess Dataset
     # ------------------------------------------------
-    def preprocess(self, X, y) -> Tuple[np.ndarray, np.ndarray]:
+    def preprocess(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Preprocessing:
+        - Convert to float32 (memory efficient)
+        - Handle missing values (Higgs typically has none)
+        - No normalization needed for tree-based models
+        """
 
-        X = np.ascontiguousarray(X, dtype=np.float32)
-        y = np.ascontiguousarray(y, dtype=np.int32)
+        # Fill any potential NaNs
+        X = X.fillna(0)
 
-        return X, y
+        # Convert to numpy float32 (critical for memory)
+        X_np = X.values.astype(np.float32)
+        y_np = y.values.astype(np.float32)
+
+        return X_np, y_np
 
     # ------------------------------------------------
     # Train/Test Split
     # ------------------------------------------------
-    def split_data(self, X, y):
+    def split_data(
+        self,
+        X: np.ndarray,
+        y: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        80/20 train-test split
+        Stratified for binary classification
+        """
 
         return train_test_split(
             X,
             y,
             test_size=self.config.TEST_SIZE,
             random_state=42,
-            shuffle=True
+            stratify=y
         )
 
+    # ------------------------------------------------
+    # Partition for Dask
+    # ------------------------------------------------
     def partition_for_dask(
         self,
         X: np.ndarray,
         y: np.ndarray,
         n_workers: int
     ) -> Tuple[da.Array, da.Array]:
+        """
+        Convert numpy arrays into Dask arrays.
 
-        if n_workers <= 0:
-            raise ValueError("n_workers must be > 0")
+        Chunking strategy:
+        - Horizontal partitioning (data parallelism)
+        - ~N/P rows per worker
+        """
 
-        n_samples = X.shape[0]
+        import math
 
-        if n_workers > n_samples:
-            raise ValueError("Number of workers exceeds number of samples.")
-
-        # Evenly distribute remainder rows
-        base_chunk = n_samples // n_workers
-        remainder = n_samples % n_workers
-
-        # Create chunk sizes list (exactly n_workers chunks)
-        chunk_sizes = [
-            base_chunk + 1 if i < remainder else base_chunk
-            for i in range(n_workers)
-        ]
+        chunk_size = math.ceil(len(X) / n_workers)
 
         X_dask = da.from_array(
             X,
-            chunks=(tuple(chunk_sizes), X.shape[1])
+            chunks=(chunk_size, X.shape[1])
         )
 
         y_dask = da.from_array(
             y,
-            chunks=(tuple(chunk_sizes),)
+            chunks=(chunk_size,)
         )
 
         return X_dask, y_dask

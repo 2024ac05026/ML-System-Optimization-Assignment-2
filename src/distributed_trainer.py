@@ -1,12 +1,11 @@
-# src/distributed_trainer.py
-
 import time
 from typing import Tuple, Dict
 
 import xgboost as xgb
-from dask.distributed import Client, LocalCluster
 from dask import array as da
 from sklearn.metrics import accuracy_score, roc_auc_score
+
+from src.dask_cluster import setup_dask_cluster, shutdown_dask_cluster
 
 
 class DistributedXGBoostTrainer:
@@ -17,23 +16,28 @@ class DistributedXGBoostTrainer:
         self.client = None
 
     # ------------------------------------------------
-    # Setup Dask LocalCluster
+    # Setup Dask Cluster (Uses Person-2 infra layer)
     # ------------------------------------------------
     def setup_cluster(self):
-        self.cluster = LocalCluster(
+        self.cluster, self.client = setup_dask_cluster(
             n_workers=self.n_workers,
-            threads_per_worker=1
+            threads_per_worker=1,
+            memory_limit="8GB",
         )
-        self.client = Client(self.cluster)
 
     # ------------------------------------------------
     # Train Distributed XGBoost
     # ------------------------------------------------
     def train(self, X, y) -> Tuple[xgb.Booster, float]:
 
-        # Convert to Dask arrays
-        X_dask = da.from_array(X, chunks=(len(X)//self.n_workers, X.shape[1]))
-        y_dask = da.from_array(y, chunks=(len(y)//self.n_workers,))
+        if self.client is None:
+            raise RuntimeError("Dask cluster not initialized. Call setup_cluster() first.")
+
+        # Chunk size per worker
+        chunk_size = len(X) // self.n_workers
+
+        X_dask = da.from_array(X, chunks=(chunk_size, X.shape[1]))
+        y_dask = da.from_array(y, chunks=(chunk_size,))
 
         dtrain = xgb.dask.DaskDMatrix(self.client, X_dask, y_dask)
 
@@ -54,8 +58,7 @@ class DistributedXGBoostTrainer:
             num_boost_round=self.config.n_estimators,
         )
 
-        end_time = time.time()
-        training_time = end_time - start_time
+        training_time = time.time() - start_time
 
         model = output["booster"]
 
@@ -66,7 +69,12 @@ class DistributedXGBoostTrainer:
     # ------------------------------------------------
     def evaluate(self, model, X_test, y_test) -> Dict[str, float]:
 
-        X_dask = da.from_array(X_test, chunks=(len(X_test)//self.n_workers, X_test.shape[1]))
+        if self.client is None:
+            raise RuntimeError("Dask cluster not initialized.")
+
+        chunk_size = len(X_test) // self.n_workers
+
+        X_dask = da.from_array(X_test, chunks=(chunk_size, X_test.shape[1]))
         dtest = xgb.dask.DaskDMatrix(self.client, X_dask)
 
         preds = xgb.dask.predict(self.client, model, dtest)
@@ -83,10 +91,8 @@ class DistributedXGBoostTrainer:
         }
 
     # ------------------------------------------------
-    # Cleanup Cluster
+    # Cleanup Cluster (Uses infra layer)
     # ------------------------------------------------
     def cleanup(self):
-        if self.client:
-            self.client.close()
-        if self.cluster:
-            self.cluster.close()
+        if self.cluster and self.client:
+            shutdown_dask_cluster(self.cluster, self.client)
