@@ -1,107 +1,96 @@
-# run_experiments.py
-
 import os
-import json
-import numpy as np
+import time
 import pandas as pd
-import multiprocessing
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
+import numpy as np
 
+from src.config import ExperimentConfig
+from src.data_loader import DataLoader
 from src.distributed_trainer import DistributedXGBoostTrainer
-from src.plot_results import plot_speedup
 
 
-# ---------------------------------------------
-# Simple Experiment Config Class (If not exists)
-# ---------------------------------------------
-class ExperimentConfig:
-    def __init__(self):
-        self.n_estimators = 50
-        self.max_depth = 6
-        self.learning_rate = 0.1
+def run_single_experiment(P: int, config: ExperimentConfig):
+
+    trainer = DistributedXGBoostTrainer(n_workers=P, config=config)
+    trainer.setup_cluster()
+
+    model, training_time = trainer.train(config.X_train, config.y_train)
+    metrics = trainer.evaluate(model, config.X_test, config.y_test)
+
+    trainer.cleanup()
+
+    return training_time, metrics["accuracy"], metrics["auc"]
 
 
-# ---------------------------------------------
-# Generate Synthetic Dataset
-# ---------------------------------------------
-def load_data():
-
-    X, y = make_classification(
-        n_samples=20000,
-        n_features=20,
-        n_informative=15,
-        n_classes=2,
-        random_state=42
-    )
-
-    return train_test_split(X, y, test_size=0.2, random_state=42)
-
-
-# ---------------------------------------------
-# Main Experiment Loop
-# ---------------------------------------------
 def main():
 
-    X_train, X_test, y_train, y_test = load_data()
-
     config = ExperimentConfig()
-    worker_list = [1, 2, 4, 8]
 
-    results = {}
+    # Load real dataset
+    loader = DataLoader()
+    X, y = loader.load_dataset()
+    X, y = loader.preprocess(X, y)
+    X_train, X_test, y_train, y_test = loader.split_data(X, y)
+
+    # Attach to config for trainer access
+    config.X_train = X_train
+    config.X_test = X_test
+    config.y_train = y_train
+    config.y_test = y_test
+
+    results = []
+
     baseline_time = None
 
-    for P in worker_list:
+    for P in config.WORKER_COUNTS:
 
-        print(f"\nRunning experiment with {P} workers")
+        run_times = []
+        accuracies = []
+        aucs = []
 
-        trainer = DistributedXGBoostTrainer(
-            n_workers=P,
-            config=config
-        )
+        print(f"\nRunning P={P}")
 
-        trainer.setup_cluster()
+        for run_id in range(config.N_RUNS_PER_CONFIG):
 
-        model, training_time = trainer.train(X_train, y_train)
+            print(f"  Run {run_id+1}/{config.N_RUNS_PER_CONFIG}")
 
-        metrics = trainer.evaluate(model, X_test, y_test)
+            training_time, accuracy, auc = run_single_experiment(P, config)
 
-        trainer.cleanup()
+            run_times.append(training_time)
+            accuracies.append(accuracy)
+            aucs.append(auc)
+
+        mean_time = np.mean(run_times)
+        std_time = np.std(run_times)
+
+        mean_auc = np.mean(aucs)
+        std_auc = np.std(aucs)
 
         if P == 1:
-            baseline_time = training_time
+            baseline_time = mean_time
             speedup = 1.0
         else:
-            speedup = baseline_time / training_time
+            speedup = baseline_time / mean_time
 
-        results[P] = {
-            "training_time": training_time,
-            "accuracy": metrics["accuracy"],
-            "auc": metrics["auc"],
-            "speedup": speedup
-        }
+        efficiency = speedup / P * 100
 
-        print(f"P={P}")
-        print(f"Training Time: {training_time:.4f}s")
-        print(f"Accuracy: {metrics['accuracy']:.4f}")
-        print(f"AUC: {metrics['auc']:.4f}")
-        print(f"Speedup: {speedup:.2f}")
+        results.append({
+            "P": P,
+            "mean_time": mean_time,
+            "std_time": std_time,
+            "speedup": speedup,
+            "efficiency_percent": efficiency,
+            "mean_auc": mean_auc,
+            "std_auc": std_auc
+        })
 
-    # ---------------------------------------------
-    # Save Results
-    # ---------------------------------------------
+    df = pd.DataFrame(results)
+
     os.makedirs("results", exist_ok=True)
+    df.to_csv("results/experiments.csv", index=False)
 
-    with open("results/experiment_results.json", "w") as f:
-        json.dump(results, f, indent=4)
-
-    df = pd.DataFrame(results).T
-    df.to_csv("results/experiment_results.csv")
-
-    print("\nExperiments completed. Results saved in results/ folder.")
+    print("\nExperiments completed.")
+    print(df)
 
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     main()
-    plot_speedup()

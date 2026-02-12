@@ -22,6 +22,8 @@ class ExperimentConfig:
     # Experiment settings
     WORKER_COUNTS = [1, 2, 4, 8]
     N_RUNS_PER_CONFIG = 3  # For averaging
+    DATASET_PATH = "data/higgs.csv"
+    TEST_SIZE = 0.2
     
     # Output
     RESULTS_FILE = "results/experiments.csv"
