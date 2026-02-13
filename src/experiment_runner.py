@@ -8,13 +8,17 @@ from src.data_loader import DataLoader
 from src.distributed_trainer import DistributedXGBoostTrainer
 
 
-def run_single_experiment(P: int, config: ExperimentConfig):
+def run_single_experiment(P: int, config: ExperimentConfig, show_dashboard=False):
 
     trainer = DistributedXGBoostTrainer(n_workers=P, config=config)
-    trainer.setup_cluster()
+    trainer.setup_cluster(show_dashboard=show_dashboard)
 
     model, training_time = trainer.train(config.X_train, config.y_train)
     metrics = trainer.evaluate(model, config.X_test, config.y_test)
+
+    if show_dashboard:
+        print(f"Dask dashboard available at: {trainer.client.dashboard_link}")
+        input("Open the dashboard now. Press Enter to continue with training...")
 
     trainer.cleanup()
 
@@ -53,7 +57,7 @@ def main():
 
             print(f"  Run {run_id+1}/{config.N_RUNS_PER_CONFIG}")
 
-            training_time, accuracy, auc = run_single_experiment(P, config)
+            training_time, accuracy, auc = run_single_experiment(P, config, show_dashboard=False)
 
             run_times.append(training_time)
             accuracies.append(accuracy)

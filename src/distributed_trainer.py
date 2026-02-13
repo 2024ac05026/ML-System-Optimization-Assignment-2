@@ -18,11 +18,12 @@ class DistributedXGBoostTrainer:
     # ------------------------------------------------
     # Setup Dask Cluster (Uses Person-2 infra layer)
     # ------------------------------------------------
-    def setup_cluster(self):
+    def setup_cluster(self, show_dashboard=False):
         self.cluster, self.client = setup_dask_cluster(
             n_workers=self.n_workers,
             threads_per_worker=1,
             memory_limit="8GB",
+            dashboard=show_dashboard
         )
 
     # ------------------------------------------------
