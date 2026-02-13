@@ -41,13 +41,7 @@ class DistributedXGBoostTrainer:
 
         dtrain = xgb.dask.DaskDMatrix(self.client, X_dask, y_dask)
 
-        params = {
-            "objective": "binary:logistic",
-            "eval_metric": "logloss",
-            "tree_method": "hist",
-            "max_depth": self.config.max_depth,
-            "eta": self.config.learning_rate,
-        }
+        params = self.config.XGBOOST_PARAMS
 
         start_time = time.time()
 
@@ -55,7 +49,7 @@ class DistributedXGBoostTrainer:
             self.client,
             params,
             dtrain,
-            num_boost_round=self.config.n_estimators,
+            num_boost_round=self.config.N_ESTIMATORS,
         )
 
         training_time = time.time() - start_time

@@ -26,7 +26,7 @@ def main():
     config = ExperimentConfig()
 
     # Load real dataset
-    loader = DataLoader()
+    loader = DataLoader(config)
     X, y = loader.load_dataset()
     X, y = loader.preprocess(X, y)
     X_train, X_test, y_train, y_test = loader.split_data(X, y)
