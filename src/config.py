@@ -3,7 +3,7 @@ class ExperimentConfig:
     # Dataset
     DATASET_PATH = "data/HIGGS.csv"
     # N_SAMPLES = 11_000_000
-    N_SAMPLES = 1100000 
+    N_SAMPLES = 5000000 
     N_FEATURES = 28
     TEST_SIZE = 0.2
 
@@ -22,7 +22,7 @@ class ExperimentConfig:
 
     
     # Experiment settings
-    WORKER_COUNTS = [1, 2, 4, 8, 16]
+    WORKER_COUNTS = [1, 2, 4, 8]
     N_RUNS_PER_CONFIG = 3  # For averaging
     
     # Output

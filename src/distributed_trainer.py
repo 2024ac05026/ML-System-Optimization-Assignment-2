@@ -1,6 +1,11 @@
 import time
 from typing import Tuple, Dict
 
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import xgboost as xgb
 from dask import array as da
 from sklearn.metrics import accuracy_score, roc_auc_score
