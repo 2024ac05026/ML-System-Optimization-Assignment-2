@@ -1,4 +1,4 @@
-# src/config.py (YOU create this)
+# src/config.py
 class ExperimentConfig:
     # Dataset
     DATASET_PATH = "data/HIGGS.csv"

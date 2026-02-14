@@ -21,7 +21,7 @@ class DistributedXGBoostTrainer:
         self.client = None
 
     # ------------------------------------------------
-    # Setup Dask Cluster (Uses Person-2 infra layer)
+    # Setup Dask Cluster
     # ------------------------------------------------
     def setup_cluster(self, show_dashboard=False):
         self.cluster, self.client = setup_dask_cluster(
