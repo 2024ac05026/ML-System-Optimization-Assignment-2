@@ -35,6 +35,9 @@ ML-System-Optimization-Assignment-2/
 ├─ results/
 │ ├─ experiments.csv # Aggregated results (appended/overwritten by runs)
 │ └─ plots/ # Saved figures (speedup, efficiency, AUC, etc.)
+├─ Architecture Design.pdf
+├─ Group 10 - MLSysOps Assignment 1.pdf
+├─ Group 10 - MLSysOps Assignment 2.pdf
 ├─ README.md
 └─ requirements.txt
 
