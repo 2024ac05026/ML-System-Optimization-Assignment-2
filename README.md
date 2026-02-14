@@ -22,6 +22,7 @@ This project evaluates **system-level optimization** techniques for gradient-boo
 
 ## Repository Structure
 
+```
 ML-System-Optimization-Assignment-2/
 ├─ src/
 │ ├─ **init**.py
@@ -38,6 +39,7 @@ ML-System-Optimization-Assignment-2/
 └─ requirements.txt
 
 > If you don't see `data/HIGGS.csv`, download or place it under `data/`.
+```
 
 ---
 
